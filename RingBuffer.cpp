@@ -19,6 +19,7 @@ void fun_generate(Queue<int> &queue)
 		queue.enqueue(i);
 		cout<<"enqueue:"<<i<<"done"<<endl;
 	}
+	std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void fun_consume(Queue<int> &queue)
@@ -42,5 +43,6 @@ int main(int argn, const char* args[])
 	std::thread t1(fun_generate, std::ref(queue));
 	std::thread t2(fun_consume, std::ref(queue));
 	t1.join();
+	t2.join();
 	return 0;
 }
