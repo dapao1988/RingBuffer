@@ -8,43 +8,71 @@
 #include <thread>
 #include <iostream>
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
 
 using namespace std;
 using namespace chrono;
 
-void fun_generate(Queue<int> &queue)
+std::mutex mut_;
+std::condition_variable cond_;
+
+void fun_generate(Queue<int> *queue)
 {
 	std::cout<<"fun_generate run"<<std::endl;
+	if (!queue)
+	{
+		return;
+	}
+
 	for (int i=0;i<100;i++)
 	{
 		cout<<"enqueue:"<<i<<endl;
-		queue.enqueue(i);
-		cout<<"enqueue:"<<i<<"done"<<endl;
+		//std::lock_guard<std::mutex> lk(mut_);
+		std::unique_lock<std::mutex> lk(mut_);
+		cond_.wait(lk, [queue]{return !queue->full();});
+		queue->enqueue(i);
+		cout<<"enqueue:"<<i<<"  done"<<endl;
+		cond_.notify_one();
 	}
 	//std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
-void fun_consume(Queue<int> &queue)
+//void fun_consume(Queue<int> &queue)
+void fun_consume(Queue<int> *queue)
 {
 	std::cout<<"fun_consume run"<<std::endl;
+	if (!queue)
+	{
+		return;
+	}
+
+	bool flag = true;
 	do
 	{
-		while(queue.empty() == 0)
+		std::unique_lock<std::mutex> lk(mut_);
+		cond_.wait(lk, [queue]{return !queue->empty();});
+		std::shared_ptr< int > i = queue->dequeue();
+		cout<<"dequeue:"<<dec<<*(i.get())<<endl<<"use count:"<<dec<<i.use_count()<<endl;
+		if(*(i.get()) == 99)
 		{
-			std::shared_ptr< int > i = queue.dequeue();
-			cout<<"dequeue:"<<dec<<*(i.get())<<endl<<"use count:"<<dec<<i.use_count()<<endl;
+			flag = false;
 		}
-		//std::this_thread::sleep_for(std::chrono::seconds(1));
-	} while (true);
+	} while(flag);
+	//std::this_thread::sleep_for(std::chrono::seconds(1));
+
 	cout<<"exit fun_consume!"<<endl;
+
 }
 
 int main(int argn, const char* args[])
 {
 	Queue<int> queue(16);
 	auto start = system_clock::now();
-	std::thread t1(fun_generate, std::ref(queue));
-	std::thread t2(fun_consume, std::ref(queue));
+	//std::thread t1(fun_generate, std::ref(queue));
+	//std::thread t1(fun_generate, std::ref(queue));
+	std::thread t1(fun_generate, &queue);
+	std::thread t2(fun_consume, &queue);
 	t1.join();
 	t2.join();
 	auto end   = system_clock::now();
