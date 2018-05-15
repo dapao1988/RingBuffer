@@ -14,6 +14,10 @@
 
 #define MAX_QUEUE_SIZE 100
 
+enum {
+	ENQUEUE_DATA_MOVE = 0,
+	ENQUEUE_DATA_COPY = 1,
+};
 class spinlock
 {
     std::atomic_flag flag = ATOMIC_FLAG_INIT;
@@ -41,14 +45,24 @@ public:
 
     ~Queue();
 
-    // pushes an item to Queue tail
-    void enqueue(const T& item);
+    /**
+     *   pushes an item to Queue tail
+     *   params@item, external item for enqueue
+     *   params@copy, move or copy data, according to requirement
+     *   0 for move, 1 for copy
+     */
+    void enqueue(const T& item, bool copy);
 
     // pops an item from Queue head
     std::shared_ptr< T > dequeue();
 
-    // try to push an item to Queue tail
-    bool try_and_enqueue(const T& item);
+    /**
+     *   try to push an item to Queue tail
+     *   params@item, external item for enqueue
+     *   params@copy, move or copy data, according to requirement
+     *   0 for move, 1 for copy
+     */
+    bool try_and_enqueue(const T& item, bool copy);
 
     // try to pop and item from Queue head
     std::shared_ptr< T > try_and_dequeue();
@@ -71,6 +85,7 @@ template < typename T >
 Queue< T >::Queue(unsigned int maxSize): CAPACITY(maxSize), cnt(0), head(0), tail(0)
 {
     data = new T[CAPACITY];
+    //memset((void *)data, 0, sizeof(T)*CAPACITY);
 }
 
 template < typename T >
@@ -93,9 +108,9 @@ Queue< T >::~Queue()
 }
 
 template < typename T >
-void Queue< T >::enqueue(const T &item)
+void Queue< T >::enqueue(const T &item, bool copy)
 {
-    while (!try_and_enqueue(item))
+    while (!try_and_enqueue(item, copy))
         ;
 }
 
@@ -109,13 +124,19 @@ std::shared_ptr< T > Queue< T >::dequeue()
 }
 
 template < typename T >
-bool Queue< T >::try_and_enqueue(const T &item)
+bool Queue< T >::try_and_enqueue(const T &item, bool copy)
 {
     std::lock_guard< spinlock > lg(lock);
     if (cnt == CAPACITY)
         return false;    // full
     ++cnt;
-    data[tail++] = std::move(item);
+    if (copy)
+    {
+    	data[tail++] = item;
+    } else
+    {
+    	data[tail++] = std::move(item);
+    }
     if (tail == CAPACITY)
         tail -= CAPACITY;
     return true;
